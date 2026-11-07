@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "bank-players": { ".read": true, ".write": true },
+    "bank-game":    { ".read": true, ".write": true },
+    "bank-stats":   { ".read": true, ".write": true },
+    "$other":       { ".read": false, ".write": false }
+  }
+}
