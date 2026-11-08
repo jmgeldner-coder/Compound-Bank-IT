@@ -349,17 +349,20 @@ function Lobby({ game, me, colors }) {
   );
 }
 
-function Playing({ game, me }) {
+/* Roll controls. On a player's phone they only appear on that player's turn;
+   the Live Screen always shows them so whoever is at the big screen can roll for anyone. */
+function RollPanel({ game, by, isOwnTurn, large, hideDice }) {
   const colorOf = useColor();
   const [mode, setMode] = useState(() => ls.get('bank-dice-mode') || 'app');
   const [rolling, setRolling] = useState(false);
   const [real, setReal] = useState([0, 0]);
   const roller = game.players[game.turnIdx];
-  const inGame = me && game.players.includes(me);
-  const myBanked = inGame && game.banked[me];
+  const lr = game.lastRoll;
   const changeMode = m => { setMode(m); ls.set('bank-dice-mode', m); };
 
-  const submitRoll = (d1, d2) => updateGame(g => (g.status === 'playing' ? applyRoll(g, d1, d2, me) : g));
+  // Only counts if it's still that player's turn (stops double rolls when two devices tap at once).
+  const submitRoll = (d1, d2) => updateGame(g =>
+    (g.status === 'playing' && g.players[g.turnIdx] === roller ? applyRoll(g, d1, d2, by || roller) : g));
 
   const rollApp = () => {
     setRolling(true);
@@ -368,9 +371,58 @@ function Playing({ game, me }) {
     setTimeout(() => { submitRoll(d1, d2); setRolling(false); }, 600);
   };
   const rollReal = () => { submitRoll(real[0], real[1]); setReal([0, 0]); };
+  const label = isOwnTurn ? 'Roll' : `Roll for ${roller}`;
+  const pick = large ? 34 : 26;
 
+  return (
+    <Card style={{ marginTop: 12, textAlign: 'left' }}>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className={`font-bold ${large ? 'text-2xl' : ''}`} style={{ color: colorOf(roller) }}>{isOwnTurn ? 'Your roll!' : `${roller}'s roll`}</div>
+        <div className="flex rounded-lg overflow-hidden text-sm shrink-0" style={{ border: `1px solid ${C.border}` }}>
+          {[['app', 'App dice'], ['real', 'Real dice']].map(([k, l]) => (
+            <button key={k} onClick={() => changeMode(k)} className="px-3 py-1.5"
+              style={{ background: mode === k ? C.surfaceLight : 'transparent', color: mode === k ? C.text : C.textMuted }}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {mode === 'app' ? (
+        <div className="text-center">
+          {!hideDice && (
+            <div className="flex justify-center gap-4 mb-4">
+              <Die value={rolling ? 6 : lr?.d1 || 1} rolling={rolling} /><Die value={rolling ? 6 : lr?.d2 || 1} rolling={rolling} />
+            </div>
+          )}
+          <Btn big onClick={rollApp} disabled={rolling} color={C.accent} textColor="#111"><Dice6 size={20} /> {rolling ? 'Rolling…' : label}</Btn>
+        </div>
+      ) : (
+        <div>
+          {[0, 1].map(i => (
+            <div key={i} className="flex gap-1.5 mb-2">
+              {[1, 2, 3, 4, 5, 6].map(v => (
+                <button key={v} onClick={() => setReal(r => { const n = [...r]; n[i] = v; return n; })}
+                  className="flex-1 rounded-lg py-1.5 flex justify-center"
+                  style={{ background: real[i] === v ? C.gold : C.surfaceLight }}>
+                  {React.createElement(DICE[v], { size: pick, style: { color: real[i] === v ? '#111' : C.text } })}
+                </button>
+              ))}
+            </div>
+          ))}
+          <Btn big onClick={rollReal} disabled={!real[0] || !real[1]} color={C.accent} textColor="#111">
+            Enter {real[0] && real[1] ? `${real[0]} + ${real[1]}` : 'roll'}{isOwnTurn ? '' : ` for ${roller}`}
+          </Btn>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Playing({ game, me }) {
+  const colorOf = useColor();
+  const roller = game.players[game.turnIdx];
+  const inGame = me && game.players.includes(me);
+  const myBanked = inGame && game.banked[me];
   const lr = game.lastRoll;
-  const showLast = lr && lr.round === game.round || (lr && lr.bust);
+  const showLast = lr && (lr.round === game.round || lr.bust);
 
   return (
     <div>
@@ -393,42 +445,13 @@ function Playing({ game, me }) {
         </Btn>
       )}
 
-      <Card style={{ marginTop: 12 }}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-semibold" style={{ color: colorOf(roller) }}>{roller === me ? 'Your roll!' : `${roller}'s roll`}</div>
-          <div className="flex rounded-lg overflow-hidden text-sm" style={{ border: `1px solid ${C.border}` }}>
-            {[['app', 'App dice'], ['real', 'Real dice']].map(([k, l]) => (
-              <button key={k} onClick={() => changeMode(k)} className="px-3 py-1.5"
-                style={{ background: mode === k ? C.surfaceLight : 'transparent', color: mode === k ? C.text : C.textMuted }}>{l}</button>
-            ))}
-          </div>
-        </div>
-        {mode === 'app' ? (
-          <div className="text-center">
-            <div className="flex justify-center gap-4 mb-4">
-              <Die value={rolling ? 6 : lr?.d1 || 1} rolling={rolling} /><Die value={rolling ? 6 : lr?.d2 || 1} rolling={rolling} />
-            </div>
-            <Btn big onClick={rollApp} disabled={rolling} color={C.accent} textColor="#111"><Dice6 size={20} /> Roll for {roller}</Btn>
-          </div>
-        ) : (
-          <div>
-            {[0, 1].map(i => (
-              <div key={i} className="flex gap-1.5 mb-2">
-                {[1, 2, 3, 4, 5, 6].map(v => (
-                  <button key={v} onClick={() => setReal(r => { const n = [...r]; n[i] = v; return n; })}
-                    className="flex-1 rounded-lg py-1.5 flex justify-center"
-                    style={{ background: real[i] === v ? C.gold : C.surfaceLight }}>
-                    {React.createElement(DICE[v], { size: 26, style: { color: real[i] === v ? '#111' : C.text } })}
-                  </button>
-                ))}
-              </div>
-            ))}
-            <Btn big onClick={rollReal} disabled={!real[0] || !real[1]} color={C.accent} textColor="#111">
-              Enter {real[0] && real[1] ? `${real[0]} + ${real[1]}` : 'roll'} for {roller}
-            </Btn>
-          </div>
-        )}
-      </Card>
+      {roller === me ? (
+        <RollPanel game={game} by={me} isOwnTurn />
+      ) : (
+        <Card style={{ marginTop: 12, textAlign: 'center' }}>
+          <div style={{ color: C.textMuted }}>Waiting for <span className="font-bold" style={{ color: colorOf(roller) }}>{roller}</span> to roll…</div>
+        </Card>
+      )}
 
       <Scoreboard game={game} />
 
@@ -546,7 +569,7 @@ function LiveScreen({ game, loading, onExit }) {
                     </div>
                   )}
                   {lr && <div className="font-bold mt-4" style={{ color: lr.bust ? C.bust : C.text, fontSize: fs(18, 3, 40) }}><span style={{ color: colorOf(lr.roller) }}>{lr.roller}</span>: {lr.note}</div>}
-                  <div className="mt-4" style={{ color: C.textMuted, fontSize: fs(18, 2.6, 32) }}>Up next: <span className="font-bold" style={{ color: colorOf(roller) }}>{roller}</span></div>
+                  <RollPanel game={game} large={wide} hideDice />
                 </>
               )}
             </div>
